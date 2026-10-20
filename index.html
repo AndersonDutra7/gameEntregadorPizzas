@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game Entregador de Pizzas</title>
+<style>
+  :root {
+    --bg: #1e1e1e;
+    --panel: #1e1e1e;
+    --title: #3c3c3c;
+    --tabbar: #252526;
+    --border: #2b2b2b;
+    --fg: #cccccc;
+    --accent: #007acc;
+    --green: #23d18b;
+    --yellow: #e5e510;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* barra de título */
+  .titlebar {
+    background: var(--title);
+    height: 30px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    color: #cccccc;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .dots { display: flex; gap: 6px; }
+  .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .dots i:nth-child(1){ background:#ff5f56; }
+  .dots i:nth-child(2){ background:#ffbd2e; }
+  .dots i:nth-child(3){ background:#27c93f; }
+  .titlebar .name { flex: 1; text-align: center; margin-right: 50px; }
+
+  /* abas do painel */
+  .tabs {
+    background: var(--tabbar);
+    display: flex;
+    align-items: center;
+    height: 35px;
+    padding: 0 12px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 11px;
+    letter-spacing: .4px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 22px;
+  }
+  .tabs span { color: #8b8b8b; padding: 8px 0; text-transform: uppercase; }
+  .tabs span.active { color: #fff; border-bottom: 1px solid #fff; }
+  .tabs .spacer { flex: 1; }
+  .tabs .shell { color: #8b8b8b; text-transform: none; }
+
+  button.run {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    border-radius: 2px;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+  button.run:hover { background: #0a8ee6; }
+  button.run:disabled { background: #3a3d41; color: #8b8b8b; cursor: not-allowed; }
+
+  /* terminal */
+  #terminal {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 16px 24px;
+    font-size: 15px;
+    line-height: 1.35;
+    cursor: text;
+  }
+  #terminal::-webkit-scrollbar { width: 12px; }
+  #terminal::-webkit-scrollbar-thumb { background: #424242; }
+  .line { white-space: pre-wrap; word-break: break-word; min-height: 1.35em; }
+  .inputline { display: flex; align-items: center; }
+  .inputline .label { white-space: pre; }
+  .inputline input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: var(--fg);
+    font: inherit;
+    caret-color: #fff;
+    caret-shape: block;
+    padding: 0;
+  }
+  .hint { color: #6a6a6a; }
+  .cursor {
+    display: inline-block; width: 8px; height: 1em; background: #ccc;
+    vertical-align: text-bottom; animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* barra de status */
+  .status {
+    background: var(--accent);
+    color: #fff;
+    height: 22px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  @media (max-width: 600px) {
+    #terminal { font-size: 13px; padding: 8px 10px 20px; }
+    .tabs .shell, .titlebar .name { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div class="dots"><i></i><i></i><i></i></div>
+  <div class="name">pizza.js — Visual Studio Code</div>
+</div>
+
+<div class="tabs">
+  <span>Problemas</span>
+  <span>Saída</span>
+  <span>Console de Depuração</span>
+  <span class="active">Terminal</span>
+  <div class="spacer"></div>
+  <span class="shell">⌨ node</span>
+  <button class="run" id="btnIniciar">▶ Iniciar</button>
+</div>
+
+<div id="terminal" tabindex="0"></div>
+
+<div class="status">
+  <span>⎇ main</span>
+  <span>JavaScript</span>
+  <span>UTF-8</span>
+</div>
+
+<script>
+(function () {
+  const term = document.getElementById('terminal');
+  const btn = document.getElementById('btnIniciar');
+  const PROMPT = 'PS C:\\projetos\\pizza> ';
+
+  let rodando = false;
+  let sessao = 0; // invalida callbacks de partidas antigas
+
+  /* ---------- "console" do terminal ---------- */
+  function out(texto, classe) {
+    const d = document.createElement('div');
+    d.className = 'line' + (classe ? ' ' + classe : '');
+    d.textContent = texto;
+    term.appendChild(d);
+    term.scrollTop = term.scrollHeight;
+    return d;
+  }
+
+  // equivalente ao console.log (aceita \n no início/fim como no Node)
+  function log(texto) {
+    String(texto === undefined ? '' : texto).split('\n').forEach(l => out(l));
+  }
+
+  function limpar() { term.innerHTML = ''; }
+
+  // equivalente ao rl.question
+  function question(pergunta, callback) {
+    const id = sessao;
+    const linha = document.createElement('div');
+    linha.className = 'line inputline';
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = pergunta;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.setAttribute('inputmode', 'numeric');
+    linha.appendChild(label);
+    linha.appendChild(input);
+    term.appendChild(linha);
+    term.scrollTop = term.scrollHeight;
+    input.focus();
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      const valor = input.value;
+      linha.innerHTML = '';
+      linha.classList.remove('inputline');
+      linha.textContent = pergunta + valor;
+      if (id !== sessao) return;
+      callback(valor);
+    });
+  }
+
+  term.addEventListener('click', function () {
+    const i = term.querySelector('input');
+    if (i) i.focus();
+  });
+
+  function prompt() {
+    const d = document.createElement('div');
+    d.className = 'line';
+    d.textContent = PROMPT;
+    const c = document.createElement('span');
+    c.className = 'cursor';
+    d.appendChild(c);
+    term.appendChild(d);
+    return d;
+  }
+
+  /* ---------- JOGO (lógica original) ---------- */
+  function jogo() {
+    let combustivel = 100;
+    let entregasRealizadas = 0;
+    let totalEntregas = 5;
+
+    function mostrarStatus() {
+      log('\n==============================');
+      log(`Combustível: ${combustivel} litros`);
+      log(`Entregas: ${entregasRealizadas}/${totalEntregas}`);
+      log('==============================');
+    }
+
+    function entregarPizza() {
+      const consumo = Math.floor(Math.random() * 21) + 10;
+      combustivel -= consumo;
+      entregasRealizadas++;
+      log('\n🍕 Pizza entregue com sucesso!');
+      log(`Você gastou ${consumo} litros de combustível.`);
+    }
+
+    function abastecerMoto() {
+      combustivel += 20;
+      if (combustivel > 100) combustivel = 100;
+      totalEntregas++;
+      log('\n⛽ Moto abastecida!');
+      log('📦 Você recebeu uma nova entrega!');
+    }
+
+    function fim() {
+      rodando = false;
+      btn.disabled = false;
+      btn.textContent = '↻ Jogar novamente';
+      log('');
+      const p = prompt();
+      p.appendChild(document.createTextNode(' '));
+    }
+
+    function jogar() {
+      if (combustivel <= 0) {
+        log('\n❌ Você ficou sem combustível!');
+        log('GAME OVER!');
+        fim();
+        return;
+      }
+
+      if (entregasRealizadas >= totalEntregas) {
+        log('\n===============================================');
+        log('PARABÉNS!!! TODAS AS ENTREGAS FORAM REALIZADAS!');
+        log('=================================================');
+        log(`Entregas realizadas: ${entregasRealizadas}`);
+        log(`Combustível restante: ${combustivel} litros`);
+        log(`\n🏆 SUA PONTUAÇÃO FINAL FOI: ${combustivel} PONTOS!`);
+        fim();
+        return;
+      }
+
+      mostrarStatus();
+
+      log('\nEscolha uma ação:');
+      log('[1] Entregar uma pizza');
+      log('[2] Abastecer a moto');
+
+      log('');
+      question('Opção: ', function (opcao) {
+        switch (opcao.trim()) {
+          case '1': entregarPizza(); break;
+          case '2': abastecerMoto(); break;
+          default: log('\nOpção inválida.');
+        }
+        jogar();
+      });
+    }
+
+    limpar();
+    log('==================================');
+    log('      ENTREGADOR DE PIZZA');
+    log('==================================');
+    log('Objetivo: realizar 5 entregas.');
+    log('Não deixe o combustível acabar!');
+    jogar();
+  }
+
+  /* ---------- botão Iniciar: simula digitar "node pizza.js" ---------- */
+  function iniciar() {
+    if (rodando) return;
+    rodando = true;
+    sessao++;
+    btn.disabled = true;
+    btn.textContent = '▶ Executando...';
+
+    limpar();
+    const linha = out(PROMPT);
+    const comando = 'node pizza.js';
+    let i = 0;
+    const t = setInterval(function () {
+      linha.textContent = PROMPT + comando.slice(0, ++i);
+      if (i >= comando.length) {
+        clearInterval(t);
+        setTimeout(jogo, 350);
+      }
+    }, 55);
+  }
+
+  btn.addEventListener('click', iniciar);
+
+  /* ---------- tela inicial ---------- */
+  const p = prompt();
+  const dica = document.createElement('span');
+  dica.className = 'hint';
+  dica.textContent = ' ';
+  p.appendChild(dica);
+  out('');
+  out('Clique em "▶ Iniciar" para executar o jogo.', 'hint');
+})();
+</script>
+</body>
+</html>
